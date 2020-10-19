@@ -1,0 +1,18 @@
+Manifest-Version: 1.0
+Bundle-Description: JAIN SLEE Project created with Mobicents EclipSLEE
+  v2.1.0.FINAL
+Implementation-Title: org.mobicents:sipACSProject-DU
+Bundle-License: http://www.gnu.org/licenses/lgpl-2.1.html
+Bundle-SymbolicName: org.mobicents.sipACSProject-DU
+Implementation-Version: 1.0
+Built-By: anar
+Bundle-ManifestVersion: 2
+Bnd-LastModified: 1603104722335
+Implementation-Vendor-Id: JBoss, a Red Hat division
+Tool: Bnd-1.15.0
+Bundle-Version: 1.0.0
+Bundle-Name: Mobicents :: sipACSProject-DU v1.0
+Created-By: Apache Maven Bundle Plugin
+Implementation-URL: http://www.mobicents.org
+Build-Jdk: 1.8.0_161
+

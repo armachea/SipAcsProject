@@ -1,0 +1,23 @@
+Manifest-Version: 1.0
+Bundle-Description: JAIN SLEE Project created with Mobicents EclipSLEE
+  v2.1.0.FINAL
+Implementation-Title: org.mobicents:sipACSProject-sbb
+Bundle-License: http://www.gnu.org/licenses/lgpl-2.1.html
+Bundle-SymbolicName: org.mobicents.sipACSProject-sbb
+Implementation-Version: 1.0
+Built-By: anar
+Bundle-ManifestVersion: 2
+Bnd-LastModified: 1603104720885
+Implementation-Vendor-Id: JBoss, a Red Hat division
+Import-Package: javax.naming,javax.slee,javax.slee.serviceactivity,net
+ .java.slee.resource.sip,org.apache.log4j,org.mobicents.slee
+Tool: Bnd-1.15.0
+Export-Package: net.inmobiles;uses:="javax.slee,javax.slee.serviceacti
+ vity,org.mobicents.slee,javax.naming,org.apache.log4j,net.java.slee.r
+ esource.sip"
+Bundle-Version: 1.0.0
+Bundle-Name: Mobicents :: sipACSProject-sbb v1.0
+Created-By: Apache Maven Bundle Plugin
+Implementation-URL: http://www.mobicents.org
+Build-Jdk: 1.8.0_161
+
