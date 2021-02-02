@@ -10,6 +10,7 @@ import javax.sip.InvalidArgumentException;
 import javax.sip.RequestEvent;
 import javax.sip.ServerTransaction;
 import javax.sip.SipException;
+import javax.sip.TransactionState;
 import javax.sip.address.Address;
 import javax.sip.address.AddressFactory;
 import javax.sip.header.ContactHeader;
@@ -30,6 +31,7 @@ import org.mobicents.slee.*;
 
 import jain.protocol.ip.mgcp.JainMgcpEvent;
 import jain.protocol.ip.mgcp.message.CreateConnection;
+import jain.protocol.ip.mgcp.message.DeleteConnection;
 import jain.protocol.ip.mgcp.message.NotificationRequest;
 import jain.protocol.ip.mgcp.message.parms.CallIdentifier;
 import jain.protocol.ip.mgcp.message.parms.ConflictingParameterException;
@@ -46,6 +48,8 @@ import net.java.slee.resource.mgcp.JainMgcpProvider;
 import net.java.slee.resource.mgcp.MgcpActivityContextInterfaceFactory;
 import net.java.slee.resource.mgcp.MgcpConnectionActivity;
 import net.java.slee.resource.mgcp.MgcpEndpointActivity;
+import net.java.slee.resource.sip.CancelRequestEvent;
+import net.java.slee.resource.sip.DialogActivity;
 import net.java.slee.resource.sip.SipActivityContextInterfaceFactory;
 import net.java.slee.resource.sip.SleeSipProvider;
 
@@ -66,10 +70,11 @@ public abstract class sipACSProjectSbb implements Sbb, sipACSProject {
 	private JainMgcpProvider mgcpProvider;
 	private MgcpActivityContextInterfaceFactory mgcpAcif;
 	public static final String ENDPOINT_NAME = "mobicents/ivr/$";
-	public static final String JBOSS_BIND_ADDRESS = "192.168.153.168";
+	public static final String JBOSS_BIND_ADDRESS = "192.168.1.82";
 	public static final int MGCP_PEER_PORT = 2427;
 	public static final int MGCP_PORT = 2727;
-	public static final String TONE_WELCOME = "http://192.168.153.174:8080/restcomm/audio/ringing.wav";
+	public static final String TONE_WELCOME = "http://192.168.153.174:8080/restcomm/audio/kiki-8000.wav";
+	public static final String TONE_WELCOME2 = "http://papalucho.eu5.net/kiki-8000.wav";
 
 	// UTIL
 	private TimerFacility timerFacility;
@@ -109,7 +114,7 @@ public abstract class sipACSProjectSbb implements Sbb, sipACSProject {
 			log.info("*** Get SDP call ***");
 			String sdp = new String(event.getRequest().getRawContent());
 			// this.setInitialSdp(sdp);
-			
+
 			createNewMgcpConnection(sdp);
 
 		} catch (Exception e) {
@@ -170,8 +175,8 @@ public abstract class sipACSProjectSbb implements Sbb, sipACSProject {
 				ContentTypeHeader contentType = headerFactory.createContentTypeHeader("application", "sdp");
 				Address contactAddress = toHead.getAddress();
 				ContactHeader contact = headerFactory.createContactHeader(contactAddress);
-				log.info("TONE_URI inCreateConnectionResponseEvent IS : " + TONE_WELCOME);
-				sendRQNT(TONE_WELCOME, true);
+				log.info("TONE_URI inCreateConnectionResponseEvent IS : " + TONE_WELCOME2);
+				sendRQNT(TONE_WELCOME2, true);
 
 				// Sending Response
 				Response response = messageFactory.createResponse(Response.SESSION_PROGRESS, request, contentType,
@@ -224,12 +229,12 @@ public abstract class sipACSProjectSbb implements Sbb, sipACSProject {
 				new RequestedEvent(new EventName(AUPackage.AU, AUMgcpEvent.auoc/* , connectionIdentifier */), actions),
 				new RequestedEvent(new EventName(AUPackage.AU, AUMgcpEvent.auof/* , connectionIdentifier */),
 						actions), };
-		
+
 		notificationRequest.setRequestedEvents(requestedEvent);
 		notificationRequest.setTransactionHandle(mgcpProvider.getUniqueTransactionHandler());
 		NotifiedEntity notifiedEntity = new NotifiedEntity(JBOSS_BIND_ADDRESS, JBOSS_BIND_ADDRESS, MGCP_PORT);
 		notificationRequest.setNotifiedEntity(notifiedEntity);
-		
+
 		if (createActivity) {
 			MgcpEndpointActivity endpointActivity = null;
 			try {
@@ -244,12 +249,13 @@ public abstract class sipACSProjectSbb implements Sbb, sipACSProject {
 				ex.printStackTrace();
 			}
 		}
-		
+
 		mgcpProvider.sendMgcpEvents(new JainMgcpEvent[] { notificationRequest });
 		log.info("RQNT-----Request--------Sent");
 	}
 
-	public void onNOTIFICATION_REQUEST_RESPONSE(jain.protocol.ip.mgcp.message.NotificationRequestResponse event, ActivityContextInterface aci/*, EventContext eventContext*/) {
+	public void onNOTIFICATION_REQUEST_RESPONSE(jain.protocol.ip.mgcp.message.NotificationRequestResponse event,
+			ActivityContextInterface aci/* , EventContext eventContext */) {
 		log.info(" ***** sipACSProjectSbb onNOTIFICATION_REQUEST_RESPONSE  ***** ");
 		ReturnCode status = event.getReturnCode();
 		switch (status.getValue()) {
@@ -262,25 +268,170 @@ public abstract class sipACSProjectSbb implements Sbb, sipACSProject {
 			log.info("RQNT failed. Value = " + rc.getValue() + " Comment = " + rc.getComment());
 			// TODO : Send DLCX to MMS. Send BYE to UA
 			// endMgcp(aci);
-			
-			//releaseState();
-			
+
+			releaseState();
+
 			break;
 		}
 	}
 
-	
+	// HELPER EVENTS
+
+	// End all Transaction and RA
+	private void releaseState() {
+
+		log.info(" ###### releaseState Procedure Started ###### ");
+		ActivityContextInterface[] activities = getSbbContext().getActivities();
+		SbbLocalObject sbbLocalObject = getSbbContext().getSbbLocalObject();
+		// count = 0;
+		try {
+			for (ActivityContextInterface attachedAci : activities) {
+
+				if (attachedAci.getActivity() instanceof Dialog) {
+					attachedAci.detach(sbbLocalObject);
+					log.info(" ###### releaseState detach (Dialog) ###### ");
+				}
+				if (attachedAci.getActivity() instanceof DialogActivity) {
+					attachedAci.detach(sbbLocalObject);
+					if (attachedAci.isEnding()) {
+						log.warn("dialog is ending, skip deleting");
+						continue;
+					} else {
+						log.warn("deleting dialog");
+						DialogActivity dialog = (DialogActivity) attachedAci.getActivity();
+						dialog.delete();
+					}
+				}
+
+				if (attachedAci.getActivity() instanceof MgcpEndpointActivity) {
+					attachedAci.detach(sbbLocalObject);
+					log.info(" ###### releaseState detach (MgcpEndpointActivity) ###### ");
+					MgcpEndpointActivity mgcpEndpoint = (MgcpEndpointActivity) attachedAci.getActivity();
+					log.info(" ###### releaseState get (mgcpEndpoint) ###### ");
+					DeleteConnection deleteConnection = new DeleteConnection(this,
+							mgcpEndpoint.getEndpointIdentifier());
+					log.info(" ###### releaseState create (deleteConnection--for--mgcpEndpoint) ###### ");
+					deleteConnection.setTransactionHandle(mgcpProvider.getUniqueTransactionHandler());
+					log.info(" ###### releaseState set (getUniqueTransactionHandler--for--deleteConnection) ###### ");
+					mgcpProvider.sendMgcpEvents(new JainMgcpEvent[] { deleteConnection });
+					log.info("SEND Delete connections: \n" + deleteConnection);
+				}
+				if (attachedAci.getActivity() instanceof ServerTransaction) {
+					attachedAci.detach(sbbLocalObject);
+					if (attachedAci.isEnding()) {
+						log.warn("server transation is ending, skip terminating");
+						return;
+
+					} else {
+						log.warn("terminating server transation");
+						ServerTransaction serverTransation = (ServerTransaction) attachedAci.getActivity();
+						serverTransation.terminate();
+					}
+				}
+
+				if (attachedAci.getActivity() instanceof ClientTransaction) {
+					attachedAci.detach(sbbLocalObject);
+					if (attachedAci.isEnding()) {
+						log.warn("client transation is ending, skip terminating");
+						continue;
+
+					} else {
+						log.warn("Starting terminating client transation");
+						ClientTransaction clientTransation = (ClientTransaction) attachedAci.getActivity();
+						clientTransation.terminate();
+					}
+				}
+
+			}
+
+		} catch (Exception e) {
+			// TODO: handle exception
+			log.error("An error has occured: " + e);
+		}
+	}
+
+	private void handleCancelForProxySbb(CancelRequestEvent cancelEvent, ActivityContextInterface dialogACI) {
+		// Get the RA to respond to the CANCEL
+		if (sipProvider.acceptCancel(cancelEvent, false)) {
+			// Cancel matched our INVITE - forward the CANCEL
+			try {
+				DialogActivity dialog = (DialogActivity) dialogACI.getActivity();
+				log.info("Sending CANCEL on dialog " + dialog);
+				dialog.sendCancel();
+				// setCancelled(true); // This stops us from forwarding the CANCEL response
+			} catch (SipException e) {
+				log.error("failed to send CANCEL error 1:", e);
+			} catch (Exception e) {
+				// TODO: handle exception
+				log.error("failed to send CANCEL error 2:", e);
+			}
+		}
+		// else CANCEL did not match. RA has sent 481 response, nothing to do.
+	}
+
+	private void handleCancelNormalSbb(CancelRequestEvent cancelEvent, ActivityContextInterface dialogACI) {
+		// Get the RA to respond to the CANCEL
+		if (sipProvider.acceptCancel(cancelEvent, false)) {
+			// Cancel matched our INVITE - forward the CANCEL
+			try {
+
+				ServerTransaction serverTransaction = cancelEvent.getServerTransaction();
+				if ((serverTransaction.getState() != TransactionState.TERMINATED)
+						&& (serverTransaction.getState() != TransactionState.COMPLETED)
+						&& (serverTransaction.getState() != TransactionState.CONFIRMED)) {
+					serverTransaction
+							.sendResponse(messageFactory.createResponse(Response.OK, cancelEvent.getRequest()));
+					log.error("SENDING OK for CANCEL REQ");
+				}
+			} catch (SipException e) {
+				log.error("failed to reply to CANCEL error 1:", e);
+			} catch (Exception e) {
+				// TODO: handle exception
+				log.error("failed to reply to CANCEL error 2:", e);
+			}
+		}
+		// else CANCEL did not match. RA has sent 481 response, nothing to do.
+	}
+
 	public void onCANCEL(net.java.slee.resource.sip.CancelRequestEvent event,
 			ActivityContextInterface aci/* , EventContext eventContext */) {
-
+		log.info("#####  onCANCEL_EVENT_TRIGGERED  #####");
+		handleCancelNormalSbb(event, aci);
 	}
 
 	public void onBYE(javax.sip.RequestEvent event, ActivityContextInterface aci/* , EventContext eventContext */) {
-
+		log.info("#####  onBYE_EVENT_TRIGGERED  #####");
 	}
 
 	public void onOPTIONS(javax.sip.RequestEvent event, ActivityContextInterface aci/* , EventContext eventContext */) {
 
+		log.info("#####  onOPTIONS_EVENT_TRIGGERED  #####");
+	}
+
+	public void onTRANSACTION_TIMEOUT(net.java.slee.resource.mgcp.event.TransactionTimeout event,
+			ActivityContextInterface aci/* , EventContext eventContext */) {
+		log.info("#####  onTRANSACTION_TIMEOUT_EVENT_TRIGGERED  #####");
+		releaseState();
+	}
+
+	public void onCLIENT_ERROR(javax.sip.ResponseEvent event,
+			ActivityContextInterface aci/* , EventContext eventContext */) {
+		log.info("#####  onCLIENT_ERROR_EVENT_TRIGGERED  #####");
+	}
+
+	public void onSERVER_ERROR(javax.sip.ResponseEvent event,
+			ActivityContextInterface aci/* , EventContext eventContext */) {
+		log.info("#####  onSERVER_ERROR_EVENT_TRIGGERED  #####");
+	}
+
+	public void onGLOBAL_FAILURE(javax.sip.ResponseEvent event,
+			ActivityContextInterface aci/* , EventContext eventContext */) {
+		log.info("#####  onGLOBAL_FAILURE_EVENT_TRIGGERED  #####");
+	}
+
+	public void onTRANSACTION(javax.sip.TimeoutEvent event,
+			ActivityContextInterface aci/* , EventContext eventContext */) {
+		log.info("#####  onTRANSACTION_EVENT_TRIGGERED  #####");
 	}
 
 	public void onREGISTER(javax.sip.RequestEvent event,
@@ -303,7 +454,7 @@ public abstract class sipACSProjectSbb implements Sbb, sipACSProject {
 	}
 
 	public void onTRYING(javax.sip.ResponseEvent event, ActivityContextInterface aci/* , EventContext eventContext */) {
-
+		// We dont do anything here!
 	}
 
 	private void replyToRequestEvent(RequestEvent event, int status) {
@@ -415,7 +566,6 @@ public abstract class sipACSProjectSbb implements Sbb, sipACSProject {
 	// 'connectionIdentifier' CMP field getter
 	public abstract String getConnectionIdentifier();
 
-	
 	/**
 	 * Convenience method to retrieve the SbbContext object stored in setSbbContext.
 	 * 
